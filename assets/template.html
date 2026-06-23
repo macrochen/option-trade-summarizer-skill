@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期权交易可视化分析报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; }
+        .chart-container { background: white; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1rem; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body class="p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">📈 期权交易可视化分析报告</h1>
+        
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+                <h3 class="text-gray-500 text-sm">总行数</h3>
+                <p class="text-2xl font-bold" id="totalRows">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+                <h3 class="text-gray-500 text-sm">卖出总金额 (元)</h3>
+                <p class="text-2xl font-bold text-green-600" id="totalSell">0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+                <h3 class="text-gray-500 text-sm">买入总金额 (元)</h3>
+                <p class="text-2xl font-bold text-red-600" id="totalBuy">0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500" id="pnlCard">
+                <h3 class="text-gray-500 text-sm" id="pnlLabel">净盈亏 (元)</h3>
+                <p class="text-2xl font-bold text-gray-600" id="netPnL">0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
+                <h3 class="text-gray-500 text-sm">总交易成本 (元)</h3>
+                <p class="text-2xl font-bold text-purple-600" id="totalCost">0.00</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 敞口分析 (Exposure) -->
+            <div class="chart-container">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">📊 同标的同到期日买卖敞口分析</h2>
+                    <span class="text-xs text-gray-500">↑ 轴上：认购 (Call) &nbsp;|&nbsp; ↓ 轴下：认沽 (Put)</span>
+                </div>
+                <div id="exposureChart" style="height: 400px;"></div>
+            </div>
+            
+            <!-- 资金流向与盈亏归因 -->
+            <div class="chart-container">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">🍩 标的资金流向与盈亏归因</h2>
+                    <span class="text-xs text-gray-500">柱状：资金流 (↑收入/↓支出) &nbsp;|&nbsp; 折线：净盈亏</span>
+                </div>
+                <div id="pnlAttributionChart" style="height: 400px;"></div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">🧾 交易明细表</h2>
+            
+            <!-- Filters -->
+            <div class="flex flex-col md:flex-row gap-4 mb-4">
+                <input type="text" id="searchInput" placeholder="搜索合约名称或类型..." class="border rounded px-3 py-2 w-full md:w-1/4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <select id="underlyingFilter" class="border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full md:w-1/4">
+                    <option value="">所有投资标的</option>
+                    <!-- Options dynamically generated via JS -->
+                </select>
+                <select id="typeFilter" class="border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full md:w-1/4">
+                    <option value="">所有期权类型 (购/沽)</option>
+                    <option value="购">仅看：认购</option>
+                    <option value="沽">仅看：认沽</option>
+                </select>
+                <select id="tradeFilter" class="border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full md:w-1/4">
+                    <option value="">所有交易方向 (买/卖)</option>
+                    <option value="买">仅看：买入</option>
+                    <option value="卖">仅看：卖出</option>
+                </select>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="id" title="点击排序">序号 ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="name" title="点击排序">名称 ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="type" title="点击排序">类型 ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="price" title="点击排序">价格 ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="quantity" title="点击排序">数量 ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="amount" title="点击排序">金额 (元) ↕</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" data-sort="cost" title="点击排序">成本 ↕</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Injection -->
+    <script id="rawData" type="application/json">
+        INJECT_JSON_DATA_HERE
+    </script>
+
+    <!-- Render Logic -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const rawDataText = document.getElementById('rawData').textContent.trim();
+            if (!rawDataText || rawDataText.startsWith('INJECT')) return;
+            
+            const data = JSON.parse(rawDataText);
+            data.forEach((r, i) => r.id = i + 1); // 绑定初始序号
+            
+            // ==================
+            // 表格渲染与交互逻辑
+            // ==================
+            let sortCol = 'id';
+            let sortAsc = true;
+            
+            const searchInput = document.getElementById('searchInput');
+            const underlyingFilter = document.getElementById('underlyingFilter');
+            const typeFilter = document.getElementById('typeFilter');
+            const tradeFilter = document.getElementById('tradeFilter');
+            const tbody = document.getElementById('tableBody');
+
+            // 动态生成存在的投资标的选项，以及“标的+到期日”复合选项
+            const underlyings = [...new Set(data.map(r => r.underlying))].filter(Boolean);
+            const underlyingsWithExpiry = [...new Set(data.map(r => `${r.underlying} ${r.expiry}`))].filter(u => u && !u.includes('undefined'));
+            
+            // 合并并排序，让同一个标的的不同月份选项排在一起
+            const allOptions = [...underlyings, ...underlyingsWithExpiry].sort();
+
+            allOptions.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u;
+                opt.textContent = u;
+                underlyingFilter.appendChild(opt);
+            });
+
+            function renderTable() {
+                // 过滤
+                let filtered = data.filter(r => {
+                    const matchText = (r.name + r.type).toLowerCase().includes(searchInput.value.toLowerCase());
+                    
+                    const combo = `${r.underlying} ${r.expiry}`;
+                    const matchUnderlying = underlyingFilter.value === '' || 
+                                            r.underlying === underlyingFilter.value || 
+                                            combo === underlyingFilter.value;
+                                            
+                    const matchType = typeFilter.value === '' || r.option_type === typeFilter.value;
+                    const matchTrade = tradeFilter.value === '' || r.type.includes(tradeFilter.value);
+                    return matchText && matchUnderlying && matchType && matchTrade;
+                });
+
+                // 排序
+                filtered.sort((a, b) => {
+                    let valA = a[sortCol];
+                    let valB = b[sortCol];
+                    if (typeof valA === 'string') {
+                        return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                    return sortAsc ? valA - valB : valB - valA;
+                });
+
+                // 渲染
+                tbody.innerHTML = '';
+                filtered.forEach(row => {
+                    const isBuy = row.type.includes('买');
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-gray-50 transition-colors";
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${row.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm ${isBuy ? 'text-red-600' : 'text-green-600'}">${row.type}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.price.toFixed(4)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.quantity}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(row.amount * 10000).toFixed(2)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.cost.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // 绑定事件监听器
+            searchInput.addEventListener('input', renderTable);
+            underlyingFilter.addEventListener('change', renderTable);
+            typeFilter.addEventListener('change', renderTable);
+            tradeFilter.addEventListener('change', renderTable);
+            
+            document.querySelectorAll('th[data-sort]').forEach(th => {
+                th.addEventListener('click', () => {
+                    const col = th.getAttribute('data-sort');
+                    if (sortCol === col) sortAsc = !sortAsc;
+                    else { sortCol = col; sortAsc = true; }
+                    renderTable();
+                });
+            });
+
+            renderTable(); // 初始渲染表格
+
+            // ==================
+            // 图表与顶部统计逻辑
+            // ==================
+            let totalSell = 0, totalBuy = 0, totalCost = 0;
+            const exposureMap = {}; 
+            const underlyingPnLMap = {}; // 用于标的资金与盈亏归因
+
+            // 这里使用未过滤的全局数据进行统计
+            data.forEach((row) => {
+                const isBuy = row.type.includes('买');
+                if (isBuy) {
+                    totalBuy += row.amount;
+                    totalCost += row.cost;
+                } else {
+                    totalSell += row.amount;
+                }
+
+                // 统计每个标的资金与盈亏
+                const uKey = `${row.underlying} ${row.expiry}`;
+                if (!underlyingPnLMap[uKey]) underlyingPnLMap[uKey] = { buyAmt: 0, sellAmt: 0 };
+                if (isBuy) underlyingPnLMap[uKey].buyAmt += row.amount * 10000;
+                else underlyingPnLMap[uKey].sellAmt += row.amount * 10000;
+
+                const key = `${row.underlying} ${row.expiry}`;
+                if (!exposureMap[key]) {
+                    exposureMap[key] = { buyCall: 0, sellCall: 0, buyPut: 0, sellPut: 0 };
+                }
+                if (isBuy && row.option_type === '购') exposureMap[key].buyCall += row.quantity;
+                else if (!isBuy && row.option_type === '购') exposureMap[key].sellCall += row.quantity;
+                else if (isBuy && row.option_type === '沽') exposureMap[key].buyPut += row.quantity;
+                else if (!isBuy && row.option_type === '沽') exposureMap[key].sellPut += row.quantity;
+            });
+
+            document.getElementById('totalRows').innerText = data.length;
+            document.getElementById('totalSell').innerText = (totalSell * 10000).toFixed(2);
+            document.getElementById('totalBuy').innerText = (totalBuy * 10000).toFixed(2);
+            document.getElementById('totalCost').innerText = totalCost.toFixed(2);
+
+            // 净盈亏计算与渲染 (卖出 - 买入) * 10000
+            const pnlValue = (totalSell - totalBuy) * 10000;
+            const pnlElem = document.getElementById('netPnL');
+            const pnlLabel = document.getElementById('pnlLabel');
+            const pnlCard = document.getElementById('pnlCard');
+            
+            if (pnlValue > 0) {
+                pnlLabel.innerText = "净盈利 (元)";
+                pnlElem.className = "text-2xl font-bold text-red-600"; 
+                pnlCard.className = "bg-white p-4 rounded-lg shadow border-l-4 border-red-500";
+                pnlElem.innerText = "+" + pnlValue.toFixed(2);
+            } else if (pnlValue < 0) {
+                pnlLabel.innerText = "净亏损 (元)";
+                pnlElem.className = "text-2xl font-bold text-green-600";
+                pnlCard.className = "bg-white p-4 rounded-lg shadow border-l-4 border-green-500";
+                pnlElem.innerText = pnlValue.toFixed(2);
+            } else {
+                pnlLabel.innerText = "盈亏平衡 (元)";
+                pnlElem.className = "text-2xl font-bold text-gray-600";
+                pnlCard.className = "bg-white p-4 rounded-lg shadow border-l-4 border-gray-500";
+                pnlElem.innerText = "0.00";
+            }
+
+            // 绘制敞口分析图 (正负堆叠柱状图，上购下沽，左买右卖)
+            const expKeys = Object.keys(exposureMap).sort((a, b) => {
+                const partsA = a.split(' ');
+                const partsB = b.split(' ');
+                const monthStrA = partsA.pop();
+                const monthStrB = partsB.pop();
+                const underlyingA = partsA.join(' ');
+                const underlyingB = partsB.join(' ');
+                
+                if (underlyingA !== underlyingB) {
+                    return underlyingA.localeCompare(underlyingB, 'zh-CN');
+                }
+                
+                // 提取月份数字进行比较（支持"7月"、"07月"、"2407"等格式）
+                const monthA = parseInt(monthStrA.replace(/\\D/g, '')) || 0;
+                const monthB = parseInt(monthStrB.replace(/\\D/g, '')) || 0;
+                return monthA - monthB;
+            });
+            
+            const expBuyCallData = expKeys.map(k => exposureMap[k].buyCall);
+            // 认沽取负值，以便在零轴下方显示
+            const expBuyPutData = expKeys.map(k => -exposureMap[k].buyPut);
+            const expSellCallData = expKeys.map(k => exposureMap[k].sellCall);
+            const expSellPutData = expKeys.map(k => -exposureMap[k].sellPut);
+
+            const exposureChart = echarts.init(document.getElementById('exposureChart'));
+            exposureChart.setOption({
+                tooltip: { 
+                    trigger: 'axis', 
+                    axisPointer: { type: 'shadow' },
+                    formatter: function (params) {
+                        let html = '<div style="font-weight:bold;margin-bottom:4px;">' + params[0].axisValue + '</div>';
+                        params.forEach(p => {
+                            if(p.value !== 0) {
+                                html += p.marker + p.seriesName + ': <b>' + Math.abs(p.value) + '</b> 张<br/>';
+                            }
+                        });
+                        return html;
+                    }
+                },
+                legend: { data: ['买认购', '买认沽', '卖认购', '卖认沽'], top: 0 },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: expKeys },
+                yAxis: { 
+                    type: 'value',
+                    axisLabel: { formatter: function(value) { return Math.abs(value); } }
+                },
+                series: [
+                    { name: '买认购', type: 'bar', stack: '买', itemStyle: {color: '#dc2626'}, data: expBuyCallData },
+                    { name: '买认沽', type: 'bar', stack: '买', itemStyle: {color: '#ef4444'}, data: expBuyPutData },
+                    { name: '卖认购', type: 'bar', stack: '卖', itemStyle: {color: '#16a34a'}, data: expSellCallData },
+                    { name: '卖认沽', type: 'bar', stack: '卖', itemStyle: {color: '#22c55e'}, data: expSellPutData }
+                ]
+            });
+
+            // 绘制资金流向与盈亏归因图
+            const pnlKeys = Object.keys(underlyingPnLMap).sort((a, b) => {
+                const partsA = a.split(' ');
+                const partsB = b.split(' ');
+                if (partsA[0] !== partsB[0]) return partsA[0].localeCompare(partsB[0]);
+                const monthA = parseInt(partsA[1]) || 0;
+                const monthB = parseInt(partsB[1]) || 0;
+                return monthA - monthB;
+            });
+            const pnlSellData = pnlKeys.map(k => underlyingPnLMap[k].sellAmt);
+            const pnlBuyData = pnlKeys.map(k => -underlyingPnLMap[k].buyAmt); // 支出在下方
+            const pnlNetData = pnlKeys.map(k => underlyingPnLMap[k].sellAmt - underlyingPnLMap[k].buyAmt);
+
+            const pnlChart = echarts.init(document.getElementById('pnlAttributionChart'));
+            pnlChart.setOption({
+                tooltip: { 
+                    trigger: 'axis', 
+                    axisPointer: { type: 'shadow' },
+                    formatter: function(params) {
+                        let html = '<div style="font-weight:bold;margin-bottom:4px;">' + params[0].axisValue + '</div>';
+                        params.forEach(p => {
+                            let valStr = Math.abs(p.value).toFixed(2);
+                            let prefix = p.seriesName === '净盈亏' ? (p.value > 0 ? '+' : (p.value < 0 ? '-' : '')) : '';
+                            if (p.seriesName === '净盈亏') valStr = prefix + Math.abs(p.value).toFixed(2);
+                            html += p.marker + p.seriesName + ': <b>' + valStr + '</b> 元<br/>';
+                        });
+                        return html;
+                    }
+                },
+                legend: { data: ['卖出收入', '买入支出', '净盈亏'], top: 0 },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: pnlKeys },
+                yAxis: { 
+                    type: 'value',
+                    axisLabel: { formatter: function(value) { return Math.abs(value); } }
+                },
+                series: [
+                    { name: '卖出收入', type: 'bar', stack: '资金', itemStyle: {color: '#16a34a'}, data: pnlSellData },
+                    { name: '买入支出', type: 'bar', stack: '资金', itemStyle: {color: '#ef4444'}, data: pnlBuyData },
+                    { 
+                        name: '净盈亏', 
+                        type: 'line', 
+                        symbol: 'circle',
+                        symbolSize: 8,
+                        itemStyle: {color: '#6366f1'}, 
+                        lineStyle: { width: 3 },
+                        data: pnlNetData 
+                    }
+                ]
+            });
+
+            window.addEventListener('resize', () => {
+                exposureChart.resize();
+                pnlChart.resize();
+            });
+        });
+    </script>
+</body>
+</html>
