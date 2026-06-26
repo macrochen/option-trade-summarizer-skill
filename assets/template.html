@@ -306,7 +306,11 @@
                 },
                 legend: { data: ['买认购', '买认沽', '卖认购', '卖认沽'], top: 0 },
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-                xAxis: { type: 'category', data: expKeys },
+                xAxis: { 
+                    type: 'category', 
+                    data: expKeys,
+                    axisLabel: { interval: 0, rotate: 45 }
+                },
                 yAxis: { 
                     type: 'value',
                     axisLabel: { formatter: function(value) { return Math.abs(value); } }
@@ -350,7 +354,11 @@
                 },
                 legend: { data: ['卖出收入', '买入支出', '净盈亏'], top: 0 },
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-                xAxis: { type: 'category', data: pnlKeys },
+                xAxis: { 
+                    type: 'category', 
+                    data: pnlKeys,
+                    axisLabel: { interval: 0, rotate: 45 }
+                },
                 yAxis: { 
                     type: 'value',
                     axisLabel: { formatter: function(value) { return Math.abs(value); } }
